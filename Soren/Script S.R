@@ -14,7 +14,7 @@ perc_NA <- colMeans(is.na(vesuvius)) *100
 vesuvius_missingness <- data.frame(
   var      = colnames(vesuvius),
   counts_na = as.vector(counts_NA),
-  perc_na   = as.vector(perc_NA)
+  perc_na   = as.vector(round(perc_NA, 1))
 ) %>%
   filter(perc_na > 0)
 print(vesuvius_missingness)
