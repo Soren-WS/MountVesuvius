@@ -1,6 +1,6 @@
 ---
 title: "Mount vesuvius seismic activity"
-author: "Soren, Samuel & Mathias"
+author: "Søren, Samuel & Mathias"
 date: "2025-08-22"
 output: html_document
 ---
@@ -9,40 +9,125 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r load packages}
-library(dplyr)
-
+### **Loading packages**
+```{r load packages, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+library(leaflet)
+library(lubridate)
+library(viridis)
+library(janitor)
 
 ```
 
-
-``` {r}
-
-
+### **Loading the data**
+``` {r, warning = FALSE, message = FALSE}
 
 vesuvius <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-05-13/vesuvius.csv')
 
+```
 
+### **Looking at the data**
+```{r}
 glimpse(vesuvius)
+```
+
+
+### **Testing for NA's in our data**
+```{r}
+counts_NA <- colSums(is.na(vesuvius)) 
+perc_NA <- colMeans(is.na(vesuvius)) *100
+
+vesuvius_missingness <- data.frame(
+  var      = colnames(vesuvius),
+  counts_na = as.vector(counts_NA),
+  perc_na   = as.vector(round(perc_NA, 1))
+) %>%
+  filter(perc_na > 0)
+print(vesuvius_missingness)
 
 ```
 
-## R Markdown
+### **Has the frequency and/or intensity changed over time?**
+```{r, fig.width = 9.5, fig.align='center'}
+theme_set(theme_minimal())
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+vesuvius %>%
+  filter(!is.na(duration_magnitude_md)) %>%
+  ggplot()+
+  geom_density(aes(x = time, 
+                   fill = cut(duration_magnitude_md,
+                              breaks = c(-Inf, 0, 2, 4, Inf),
+                              labels = c("Micro", "Unnoticeable",
+                                         "Barely felt", "Uh Oh!"))), 
+                   alpha = 0.5)+ 
+  labs(
+    x = "Time",
+    y = "Earthquake Frequency",
+    fill = "Intensity",    # if you map fill = grouping var
+    title = "Vesuvius Earthquakes - How often and intense?",
+  )+ 
+  scale_fill_viridis_d(option = "magma")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
+### **Removing rows without coordinates**
+```{r}
+vesu_pts <- vesuvius %>%
+  filter(!is.na(longitude), !is.na(latitude), !is.na(duration_magnitude_md)) %>%
+  st_as_sf(coords = c("longitude","latitude"), crs = 4326, remove = FALSE)
 
-You can also embed plots, for example:
+glimpse(vesu_pts)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### **Where is the seismic activity located?**
+```{r, fig.width = 9.5, fig.align='center'}
+
+pal <- colorNumeric(palette = "magma",
+                    domain = vesu_pts$duration_magnitude_md)
+
+
+leaflet(vesu_pts) %>%
+  addTiles() %>%   # OpenStreetMap basemap
+  addCircleMarkers(
+    radius = 4,
+    color = ~pal(duration_magnitude_md), #color from the palette
+    stroke = FALSE, fillOpacity = 0.7,
+    popup = ~paste0("Magnitude: ", duration_magnitude_md,
+                    "<br>Depth (km): ", depth_km,
+                    "<br>Time: ", time)
+  ) %>% 
+  addLegend("bottomright", pal = pal, values = ~duration_magnitude_md,
+            title = "Magnitude (md)")
+
+
+```
+
+### **Is the intensity of the activity and the depth correlated?**
+```{r}
+depth_mag <- vesuvius %>%
+  filter(!is.na(depth_km), !is.na(duration_magnitude_md))
+
+# Correlation test
+(cor_test <- cor.test(depth_mag$depth_km, depth_mag$duration_magnitude_md))
+
+
+```
+#### **Magnitude ~ depth?**
+#### *Correlation coefficient = 0.29*
+#### *p-value < 2.2e-16*
+
+
+
+
+
+
+### **To access the data [Click here](https://github.com/rfordatascience/tidytuesday/blob/main/data/2025/2025-05-13/readme.md)**
+
+### **For more information [Click here](https://terremoti.ov.ingv.it/gossip/vesuvio/index.html)**
+
+
+![](https://media1.tenor.com/m/KaCvlGxPxFMAAAAd/volcano-eruption.gif)
+
